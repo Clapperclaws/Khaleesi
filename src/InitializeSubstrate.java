@@ -115,4 +115,14 @@ public class InitializeSubstrate {
 		}
 		return linkArray;				
 	}
+	
+public SubstrateNetwork generateFatTree(int k) throws IOException{
+		//Initialize the FatTree Topology
+		FatTree fatTreeNet = new FatTree(k);
+		SubstrateNetwork graph = new SubstrateNetwork(fatTreeNet.nodelist,fatTreeNet.linklist);
+			
+		return graph;
+	}
+
+	
 }

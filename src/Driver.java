@@ -35,8 +35,8 @@ public class Driver {
 		Flow f = new Flow(0, G.getNodes()[0], G.getNodes()[3], s, 1);
 		System.out.println("Flow "+f);
 		
-		ILP model = new ILP();
-		int[][] M = {{0,0,1,1},{0,0,1,1},{1,1,0,1},{1,1,1,0}};
+		LP model = new LP();
+		int[][] M = {{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};//{{0,0,1,1},{0,0,1,1},{1,1,0,1},{1,1,1,0}};
 		
 		System.out.println("Printing RMC");
 		NF i = s.head;
@@ -62,8 +62,8 @@ public class Driver {
 		
 		ArrayList<VirtualLink> vLinks = generateE(f,M);
 		System.out.println(vLinks);
-		model.runILP(G, M, f, vLinks);
-	}
+			model.runLP(G, M, f, vLinks);
+		}
 	
 	public static boolean contains(ArrayList<VirtualLink> vLinks,NF source, NF destination){
 		for(int i=0;i<vLinks.size();i++){

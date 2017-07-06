@@ -9,20 +9,18 @@ import ilog.concert.IloNumVarType;
 import ilog.cplex.IloCplex;
 
 	
-public class ILP {
+public class LP {
 	
 	//Parameter
 	int numNFs;
 	
 	//Decision Variable
-	IloIntVar[][] theta;
-	IloIntVar[][]   x ;
-	IloIntVar[][]   y ;
+	IloNumVar[][]   theta;
+	IloNumVar[][]   x ;
+	IloNumVar[][]   y ;
 	IloNumVar[][][] w ;
-	IloIntVar[]     z;
-	IloIntVar[][]   q;
-	IloIntVar[][]   delta;
-	IloIntVar[][][]   gamma;
+	IloNumVar[]     z;
+	IloNumVar[][]   c;
 	
 	public boolean isContain(ArrayList<VirtualLink> E, NF origin, NF destination){
 		for(int e=0;e<E.size();e++){
@@ -32,7 +30,7 @@ public class ILP {
 		return false;
 	}
 	
-	public void runILP(SubstrateNetwork G, int[][] M, Flow f, ArrayList<VirtualLink> E) throws IloException{
+	public void runLP(SubstrateNetwork G, int[][] M, Flow f, ArrayList<VirtualLink> E) throws IloException{
 		IloCplex model = buildILP(G,M,f,E);
 		numNFs = f.getvLinks().size()+1;
 		model.exportModel("ILP.lp");
@@ -46,16 +44,16 @@ public class ILP {
 			System.out.println("NF Placements");
 			for(int i=0;i<numNFs;i++){
 				for(int j=0;j<G.getNodes().length;j++){
-					if(model.getValue(theta[i][j])>=0.9)
-						System.out.println("NF "+f.getChain().NFs.get(i).id+" of type "+ f.getChain().NFs.get(i).mb.type +" is placed on "+G.getNodes()[j].getID());
+					if(model.getValue(theta[i][j]) > 0)
+						System.out.println(model.getValue(theta[i][j])+"% of NF "+f.getChain().NFs.get(i).id+" of type "+ f.getChain().NFs.get(i).mb.type +" is placed on "+G.getNodes()[j].getID());
 				}
 			}
 			
 			for(int i=0;i<E.size();i++){
 				for(int j=0;j<G.getNodes().length;j++){
-					if(model.getValue(x[i][j]) >= 0.9)
+					if(model.getValue(x[i][j]) > 0)
 						System.out.println("Source of Link "+E.get(i).getID()+" is placed on "+G.getNodes()[j].getID());
-					if(model.getValue(y[i][j]) >= 0.9)
+					if(model.getValue(y[i][j]) > 0)
 						System.out.println("Destination of Link "+E.get(i).getID()+" is placed on "+G.getNodes()[j].getID());
 			
 				}
@@ -64,7 +62,7 @@ public class ILP {
 			
 			System.out.println("Chosen E Links");
 			for(int i=0;i<E.size();i++){
-				if(model.getValue(z[i]) >= 0.9){
+				if(model.getValue(z[i]) > 0){
 					System.out.println("Z "+i +"is routed through Path: ");
 				for(int j=0;j<G.getNodes().length;j++){
 					for(int k=0;k<G.getNodes().length;k++){
@@ -122,33 +120,29 @@ public class ILP {
 	    
 		
 		//Decision Variables
-		theta = new IloIntVar[numNFs][numSubstrateNodes]; // denotes the placement of each NF in f
-		delta = new IloIntVar[numNFs][numNFs];
-		gamma = new IloIntVar[numNFs][numNFs][numNFs];
+		theta = new IloNumVar[numNFs][numSubstrateNodes]; // denotes the placement of each NF in f
 		for(int i=0;i<numNFs;i++){
 			for(int j=0;j<numSubstrateNodes;j++)
-				theta[i][j] = model.intVar(0,1,"theta"+i+j);
-			for(int j=0;j<numNFs;j++){
-				delta[i][j] = model.intVar(0,1,"delta"+i+j);
-				for(int k=0;k<numNFs;k++){
-					gamma[i][j][k] = model.intVar(0,1,"gamma"+i+j+k);
-				}
+				theta[i][j] = model.numVar(0.0,1.0,"theta"+i+j);
+		}
+		x   = new IloNumVar[E.size()][numSubstrateNodes]; //denotes the placement of e's source
+		y   = new IloNumVar[E.size()][numSubstrateNodes]; //denotes the placement of e's destination
+		w   = new IloNumVar[E.size()][numSubstrateNodes][numSubstrateNodes]; //denotes the routing of e
+		z   = new IloNumVar[E.size()]; //indicates if link e is routed
+		c   = new IloNumVar[numSubstrateNodes][numSubstrateNodes];
+		for(int i=0;i<E.size();i++){
+			z[i] = model.numVar(0.0, 1.0,"z"+i);
+			for(int j=0;j<numSubstrateNodes;j++){
+				x[i][j] = model.numVar(0.0, 1.0,"x"+i+j);
+				y[i][j] = model.numVar(0.0, 1.0,"y"+i+j);
+				for(int k=0;k<numSubstrateNodes;k++)
+					w[i][j][k] = model.numVar(0.0,1.0,"w"+i+j+k);//numVar(0.0, Double.MAX_VALUE,"w"+i+j+k);
 			}
 		}
-		x   = new IloIntVar[E.size()][numSubstrateNodes]; //denotes the placement of e's source
-		y   = new IloIntVar[E.size()][numSubstrateNodes]; //denotes the placement of e's destination
-		w   = new IloNumVar[E.size()][numSubstrateNodes][numSubstrateNodes]; //denotes the routing of e
-		z   = new IloIntVar[E.size()]; //indicates if link e is routed
-		q   = new IloIntVar[E.size()][E.size()];
-		for(int i=0;i<E.size();i++){
-			z[i] = model.intVar(0, 1,"z"+i);
-			for(int j=0;j<E.size();j++)
-				q[i][j] = model.intVar(0, 1,"q"+i+j);
+		
+		for(int i=0;i<numSubstrateNodes;i++){
 			for(int j=0;j<numSubstrateNodes;j++){
-				x[i][j] = model.intVar(0, 1,"x"+i+j);
-				y[i][j] = model.intVar(0, 1,"y"+i+j);
-				for(int k=0;k<numSubstrateNodes;k++)
-					w[i][j][k] = model.numVar(0.0,1.0,IloNumVarType.Int,"w"+i+j+k);//numVar(0.0, Double.MAX_VALUE,"w"+i+j+k);
+				c[i][j] = model.numVar(0.0, 1.0,"c"+i+j);
 			}
 		}
 	
@@ -174,8 +168,7 @@ public class ILP {
 		
 		/*Constraint #2 and #3 - The source and destination of E must be 
 		 * placed where the corresponding MB type is placed
-		 */
-		
+		 */		
 		for(int i=0;i<E.size();i++){
 			int sourceType = E.get(i).getOriginMB().mb.getType();
 			int destType   = E.get(i).getDestMB().mb.getType();
@@ -239,10 +232,12 @@ public class ILP {
             	if(isSubstrateLink[i][j] == 1){
             		e1 = model.sum(e1,w[e][i][j]);
 					e2 = model.sum(e2,w[e][j][i]);
-					//model.addLe(model.sum(w[e][i][j],w[e][j][i]), 1); //Prevent Loop              	
+					model.addLe(model.sum(w[e][i][j],w[e][j][i]), 1);
             	}
             }       
-            	model.addEq(model.diff(e1,e2), model.diff(x[e][i],y[e][i]),"Routing Constraint "+e);          
+            	model.addEq(e1, x[e][i],"FlowCons1"+e+"_"+i);
+            	model.addEq(e2, y[e][i],"FlowCons2"+e+"_"+i);
+            	model.addEq(model.diff(e1,e2), 0,"FlowCons3"+e+"_"+i);          
             }
         }
         
@@ -265,24 +260,8 @@ public class ILP {
         	//model.addGe(model.sum(ingE,eggE),1);
         }
         
-        //Constraint # 9 - Internal Switching Constraint
-		IloIntVar [][] q = new IloIntVar[E.size()][numSubstrateNodes];
-		for(int i=0;i<E.size();i++)
-			for(int j=0;j<numSubstrateNodes;j++)
-				q[i][j] = model.intVar(0, 1,"q"+i+j);
-				
-		for (int i=0;i<numSubstrateNodes;i++){  	
-        	IloNumExpr e = model.numExpr();
-			for(int j=0;j<E.size();j++){
-        		model.addLe(q[j][i], x[j][i]);
-        		model.addLe(q[j][i], y[j][i]);
-        		model.addGe(q[j][i],model.diff(model.sum(x[j][i],y[j][i]),1));
-        		e = model.sum(e,model.prod(q[j][i],E.get(j).getBW()));
-        	}
-        	model.addLe(e,G.getNodes()[i].getb(),"InternalSwitchingCapacity_"+i);
-        }
         
-        //Constraint # 10 - Link Capacity Constraint
+        //Constraint # 10 - Link Capacity Constraint		
     	 for(int j=0;j<numSubstrateNodes;j++){
     		for(int k=j;k<numSubstrateNodes;k++){
     			if(isSubstrateLink[j][k] == 0)
@@ -290,47 +269,35 @@ public class ILP {
     			
     			IloNumExpr e = model.numExpr();
     			 for(int i=0;i<E.size();i++){
-    				e = model.sum(e, model.prod(model.sum(w[i][j][k],w[i][k][j]),E.get(i).getBW()));
+    				e = model.sum(e, model.sum(w[i][j][k],w[i][k][j]));
+    			
+    			//	IloNumExpr exp = model.numExpr();
+    			//	exp = model.prod(Double.MAX_VALUE/2,model.sum(w[i][j][k],w[i][k][j]));
+    				
+    			//	model.addLe(c[j][k], model.sum(model.sum(w[i][j][k],w[i][k][j]),
+    			//			model.prod(1, 1/exp))),"min_"+j+k);
     			 }
-    			model.addLe(e,G.getLinks()[G.getLinkIndex(G.getNodes()[j].getID(), G.getNodes()[k].getID())].getBW(),"LinkCapacity"+j+k);
+    			model.addLe(e,c[j][k],"LinkCapacity"+j+k);
     		}
     	 }
-    	 
-    	 //Constraint # 11 - Indicate the order of NFs in the chain
-    	/* for(int i=0;i<E.size();i++){
-    		int originIndex = getIndexNF(f,E.get(i).getOriginMB().id);
-    		int destinationIndex = getIndexNF(f,E.get(i).getDestMB().id);
-    		
-    		model.addEq(delta[originIndex][destinationIndex],z[i],"OrderConsNFs"+i);
-    		
-    	 }*/
-    	 //Constraint # 12 - Indicate the order of the NFs in the chain
+ 	
+    	//Constraint # 11 - Do not violate any invariants
     	 for(int i=0;i<numNFs;i++){
     		 for(int j=0;j<numNFs;j++){
-    			 int index = getVLinkIndex(f.getChain().NFs.get(i), f.getChain().NFs.get(j), E);
- 	    		
-    			  if(j!=i){
-	    			 for(int k=0;k<numNFs;k++){
-	    				 if((k!=j) && (k!=i)){
-	    					 //expr = model.sum(expr,delta[i][k]);
-	    					 model.addLe(gamma[i][k][j],delta[i][k]);
-	    					 model.addLe(gamma[i][k][j],delta[k][j]);
-	    					 model.addGe(gamma[i][k][j],model.diff(model.sum(delta[i][k],delta[k][j]),1));
-	    					//expr = model.sum(expr,gamma[i][k][j]);
-	    					 if(index == -1)
-	    						 model.addGe(delta[i][j], gamma[i][k][j]);
-	    					 else
-	    						 model.addGe(delta[i][j], model.sum(z[index],gamma[i][k][j]));
-	    				 }
-	    			 }
-    			 }
-    		 }
-    		 
-    	 }
-    	//Constraint # 13 - Do not violate any invariants
-    	 for(int i=0;i<numNFs;i++){
-    		 for(int j=0;j<numNFs;j++){
-    			 model.addLe(delta[i][j],Omega[i][j]);
+    			if(Omega[i][j] == 0){
+    				for(int k=0;k<numNFs;k++){
+    					if(k == i)
+    						continue;
+    					if(k == j)
+    						continue;
+    					int sourceIndex = getVLinkIndex(f.getChain().NFs.get(i),
+    							f.getChain().NFs.get(k), f.getvLinks());
+    					int dstIndex = getVLinkIndex(f.getChain().NFs.get(k),
+    							f.getChain().NFs.get(j), f.getvLinks());
+    					if(sourceIndex != -1 && dstIndex != -1)
+    						model.addLe(model.sum(z[sourceIndex], z[dstIndex]),1,"PreventOrderViolation_"+i+j);
+    				}
+    			}
     		 }
     	 }
     	 return model;    

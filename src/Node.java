@@ -121,7 +121,7 @@ public class Node {
 	}
 	
 	public String toString(){
-		return this.getID()+","+this.getCPU();
+		return this.getID()+", internal switchin cap "+this.b+", CPU = "+this.getCPU();
 	}
 	
 	public int getb(){
